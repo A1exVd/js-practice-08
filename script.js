@@ -14,7 +14,7 @@ const historySection = document.getElementById('history-section');
 const historyDiv = document.getElementById('history');
 const clearHistoryBtn = document.getElementById('clearHistory');
 
-const paggination = document.querySelector('#pagination');
+const pagination = document.querySelector('#pagination');
 const pageBtnList = document.querySelector('#pag-list');
 const prevBtn = document.querySelector('#prev-btn');
 const nextBtn = document.querySelector('#next-btn');
@@ -41,6 +41,18 @@ function hideLoader() {
   loader.classList.add('hidden');
 }
 
+/* Функция для выключения кнопки */
+function disableBtn(btn) {
+  btn.disabled = true;
+  btn.classList.add('disabled');
+}
+
+/* Функция для включения кнопки */
+function enableBtn(btn) {
+  btn.disabled = false;
+  btn.classList.remove('disabled');
+}
+
 /* 
   Debounce эффект, используем замыкания для сохранения id setTimeout.
   Каждый вызов функции очищает предыдущий setTimeout
@@ -48,7 +60,7 @@ function hideLoader() {
 function createDebounce() {
   let id = null;
   return function(fn, delay, e) {
-    clearInterval(id)
+    clearTimeout(id)
     id = setTimeout(() => {
       fn(e);
     }, delay)
@@ -57,7 +69,6 @@ function createDebounce() {
 
 /* Debounce обертка */
 const debounce = createDebounce();
-
 
 /* Функция для получения данных профиля пользователя */
 async function getUser(username) {
@@ -86,7 +97,7 @@ async function getRepos(username, currentPage) {
   // Аналогично getUser, fetch репозиториев
   const reposResp = await fetch(`https://api.github.com/users/${username}/repos?per_page=5&page=${currentPage}`);
   if(!reposResp.ok) {
-    throw new Error("Сервер ответил: " + userResponse.status)
+    throw new Error("Сервер ответил: " + reposResp.status)
   } 
 
   const contentType = reposResp.headers.get('Content-Type');
@@ -138,7 +149,7 @@ function renderRepos(repos) {
     repoHead.append(repoRef);
 
     const repoDesc = document.createElement('p');
-    repoDesc.textContent = repo['description']
+    repoDesc.textContent = repo['description'];
     const repoRating = document.createElement('span');
     repoRating.textContent = `⭐ ${repo['stargazers_count']}`;
 
@@ -167,25 +178,34 @@ const handleSearch = async (e) => {
 
   try {
     showLoader();
-    searchBtn.disabled = true;
+    disableBtn(searchBtn);
 
     const [user, repos] = await Promise.all([
       getUser(username),
       getRepos(username, currentPage)
     ]);
 
+    if(!user) {
+      throw new Error('Ошибка: user возможно null или undefined')
+    }
+
     renderProfile(user);
     saveToStorage(user.login);
     reposQuantity = user['public_repos'];
+
+    if(!repos) {
+      throw new Error('Ошибка: repos возможно null или undefined')
+    }
+
     renderRepos(repos);
     renderPageBtns(currentPage);
     renderFromStorage();
 
   } catch (error) {
-    showError(error);
+    showError(error.message);
   } finally {
     hideLoader();
-    searchBtn.disabled = false;
+    enableBtn(searchBtn);
   }
 }
 
@@ -198,7 +218,7 @@ function setDefaults() {
   profileSection.classList.add('hidden');
   reposSection.classList.add('hidden');
   historySection.classList.add('hidden');
-  paggination.classList.add('hidden');
+  pagination.classList.add('hidden');
 }
 
 
@@ -226,7 +246,7 @@ function renderPageBtns(firstBtnNum) {
     pageBtnList.textContent = '';
     
     if(pagesQuantity > 1) {
-      paggination.classList.remove('hidden');
+      pagination.classList.remove('hidden');
     }
     
     for (let i = firstBtnNum; i <= firstBtnNum + btnTotalNum; i++) {
@@ -278,22 +298,17 @@ function createPageBtn(page) {
 */
 function switchDisablePrevNext() {
   if(currentPage == 1) {
-    prevBtn.disabled = true;
-    prevBtn.classList.add('disabled');
-    nextBtn.disabled = false;
-    nextBtn.classList.remove('disabled');
+    disableBtn(prevBtn);
+    enableBtn(nextBtn);
   } else if(currentPage == pagesQuantity) {
-    nextBtn.disabled = true;
-    nextBtn.classList.add('disabled');
-    prevBtn.disabled = false;
-    prevBtn.classList.remove('disabled');
+    disableBtn(nextBtn);
+    enableBtn(prevBtn);
   } else {
-    prevBtn.disabled = false;
-    prevBtn.classList.remove('disabled');
-    nextBtn.disabled = false;
-    nextBtn.classList.remove('disabled');
+    enableBtn(nextBtn);
+    enableBtn(prevBtn);
   }
 }
+
 
 /* Выделяет кнопку текущей страницы */
 function highlightCurrentBtn() {
@@ -305,6 +320,24 @@ function highlightCurrentBtn() {
       btn.classList.remove('current');
     }
   });
+}
+
+/* обрабатывает получение репозиториев пользователя */
+async function fetchRenderRepos() {
+  try {
+    showLoader();
+    const repos = await getRepos(usernameInput.value, currentPage);
+    
+    if(!repos) {
+      throw new Error("Ошибка: repos возможно null или undefined!");
+    }
+
+    renderRepos(repos);
+  } catch (error) {
+    console.log(error.message);
+  } finally {
+    hideLoader();
+  }
 }
 
 prevBtn.addEventListener('click', async () => {
@@ -320,7 +353,6 @@ prevBtn.addEventListener('click', async () => {
     ? spanEl.nextElementSibling.querySelector('button').dataset.page
     : pageBtnList.firstElementChild.querySelector('button').dataset.page
   
-    currentPage--;
     if (leftMostBtnNum > currentPage) {
       renderPageBtns(currentPage);
     }
@@ -328,17 +360,10 @@ prevBtn.addEventListener('click', async () => {
 
   highlightCurrentBtn();
   switchDisablePrevNext();
-
-  try {
-    showLoader();
-    const repos = await getRepos(usernameInput.value, currentPage);
-    renderRepos(repos);
-  } catch (error) {
-    console.log(error);
-  } finally {
-    hideLoader();
-  }
+  fetchRenderRepos();
 })
+
+
 
 nextBtn.addEventListener('click', async () => {
   if(currentPage >= pagesQuantity) return;
@@ -353,7 +378,6 @@ nextBtn.addEventListener('click', async () => {
     ? spanEl.previousElementSibling.querySelector('button').dataset.page
     : pageBtnList.lastElementChild.querySelector('button').dataset.page
   
-    currentPage++;
     if(Number(rightMostBtnNum) == currentPage) {
       renderPageBtns(currentPage - btnTotalNum);
     }
@@ -361,16 +385,7 @@ nextBtn.addEventListener('click', async () => {
 
   highlightCurrentBtn();
   switchDisablePrevNext();
-
-  try {
-    showLoader();
-    const repos = await getRepos(usernameInput.value, currentPage);
-    renderRepos(repos);
-  } catch (error) {
-    console.log(error);
-  } finally {
-    hideLoader();
-  }
+  fetchRenderRepos();
 })
 
 pageBtnList.addEventListener('click', async (e) => {
@@ -391,15 +406,7 @@ pageBtnList.addEventListener('click', async (e) => {
 
     highlightCurrentBtn();
     switchDisablePrevNext();
-    try {
-      showLoader();
-      const repos = await getRepos(usernameInput.value, currentPage);
-      renderRepos(repos);
-    } catch (error) {
-      console.log(error);
-    } finally {
-      hideLoader();
-    }
+    fetchRenderRepos();
   }
 })
 
@@ -423,15 +430,13 @@ function saveToStorage(username) {
     //  нет массива - создаем новый
     usernameArr = [];
     usernameArr.push(username);
-  } else if(usernameArr.includes(username)) {
+  } 
+  if(usernameArr.includes(username)) {
     // в массиве уже есть такоей пользователь
     return;
-  } else if (usernameArr.length < 3) {
-    // в массиве меньше 3 пользователей - добавляем
-    usernameArr.push(username);
-  } else {
-    // в массиве три пользователя - добавляем новый в конец, удаляем перый в начале.
-    usernameArr.push(username);
+  } 
+  usernameArr.push(username);
+  if(usernameArr.length > 3) {
     usernameArr.shift();
   }
 
@@ -492,4 +497,4 @@ clearHistoryBtn.addEventListener('click', () => {
 
 
 // initials 
-renderFromStorage(loadFromStorage('gh-search-history'))
+renderFromStorage()
