@@ -377,8 +377,8 @@ nextBtn.addEventListener('click', async () => {
     const rightMostBtnNum = spanEl.tagName === "SPAN" 
     ? spanEl.previousElementSibling.querySelector('button').dataset.page
     : pageBtnList.lastElementChild.querySelector('button').dataset.page
-  
-    if(Number(rightMostBtnNum) == currentPage) {
+    
+    if(Number(rightMostBtnNum) == currentPage - 1) {
       renderPageBtns(currentPage - btnTotalNum);
     }
   }
